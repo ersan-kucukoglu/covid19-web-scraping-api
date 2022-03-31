@@ -1,0 +1,111 @@
+---
+title: "Assignment2"
+author: "Ersan Kucukoglu"
+date: "11/29/2021"
+output:
+  prettydoc::html_pretty:
+    theme: cayman
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+#clear memory
+rm(list=ls())
+#load the libraries
+library(tidyverse)
+library(httr)
+library(jsonlite)
+library(data.table)
+library(kableExtra)
+library(modelsummary)
+```
+### API Data Processing
+
+[Covid Act Now](https://covidactnow.org/?s=26091515) 
+
+[API](https://apidocs.covidactnow.org/)
+
+The Covid Act Now API provides access to all of our COVID data tracking US states, counties, and metros.
+
+It includes data and metrics for cases, vaccinations, tests, hospitalizations, and deaths. See data definitions for all included data.
+
+The API provides the same data that powers Covid Act Now but in easily digestible CSV or JSON files, intended for consumption by other COVID websites, models, and tools.
+
+
+```{r,echo=FALSE}
+#base url
+base <- 'https://api.covidactnow.org/v2/county/'
+
+info_key <- '.timeseries.json?apiKey=f6426572c2ad47848dedfecccad1de97'
+```
+
+```{r,echo=FALSE}
+#  GET request for the first API
+county <- '06037'
+API_URL <- paste0(base, county, info_key)
+api_call <- GET(API_URL)
+#api_call$status_code
+#api_call$content
+
+# Converting the content of the API pull into a list
+api_json <- fromJSON(rawToChar(api_call$content), flatten = TRUE)
+
+df <- api_json$actualsTimeseries
+```
+
+
+### Functions, lapply and rbindlist
+```{r}
+
+# Taking the three counties; Los Angeles, San Diego, San Francisco
+counties <- c('06037', '06073', '06075')
+
+#List of API urls for each county
+API_urls <- paste0(base,counties[1:3],info_key)
+
+# Get the multiple API data
+get_API_data <- function(API) {
+  api_call <- GET(API)
+  
+  api_json <- fromJSON(rawToChar(api_call$content), flatten = TRUE) 
+  df1 <- api_json$actualsTimeseries
+}
+#list of dfs
+list_of_dfs <- lapply(API_urls, get_API_data)
+#final df
+final_df <- rbindlist(list_of_dfs)
+
+```
+
+### Head of the resul
+```{r,echo=FALSE}
+final_df <- final_df %>% filter(!is.na(cases ))
+final_df$date <- as.Date(final_df$date)
+final_df$county <- NA
+LA <- final_df$county[1:666] <-"Los Angeles"
+SD <- final_df$county[666:1317] <-"San Diego"
+SF <- final_df$county[1317:1976] <-"San Francisco"
+# Looking at the top rows for a few specific columns
+kbl(head(final_df[,c("cases", "deaths", "newCases","newDeaths","date")],10))
+```
+
+```{r,echo=FALSE,warning=FALSE}
+p1 <- ggplot(data=final_df %>% filter(date >= "2021-01-01"),aes(x=date, y=newDeaths,color=county))+
+  geom_line()+
+  labs(title = "New Deaths after 2021-01-01 in Los Angeles,San Diego,San Francisco",x= "Date", y= "New Confirmed Deaths")
+  
+p1
+
+```
+
+```{r, echo=FALSE,warning=FALSE}
+p2 <- ggplot(final_df %>% filter(!is.na(cases ) & !is.na(deaths) & date >= "2021-01-01"),aes(x=cases,y=deaths,color=county))+
+  geom_line()+
+  labs(title='Cases vs. Deaths after 2021-01-01 in Los Angeles,San Diego,San Francisco ',x='Cases',y='Deaths')
+p2
+
+```
+
